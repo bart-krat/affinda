@@ -1,7 +1,5 @@
 """Unit tests for orchestrator module."""
 
-import os
-import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch, AsyncMock
@@ -20,6 +18,7 @@ from src.orchestrator import (
     phase4_generate_schedule,
     _select_algorithm,
     _parse_time,
+    ValidationError,
     STATE_DIR,
 )
 from src.models.workflow import WorkflowState, WorkflowPhase
@@ -34,10 +33,8 @@ class TestStateFileHelpers:
         """Use temporary directory for state files."""
         self.original_state_dir = STATE_DIR
         self.temp_dir = Path(tempfile.mkdtemp())
-        # Patch STATE_DIR for tests
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
             yield
-        # Cleanup
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_parse_time_morning(self):
@@ -76,7 +73,6 @@ class TestSelectAlgorithm:
 
     def test_knapsack_when_tasks_dont_fit(self, default_window):
         """Should select knapsack when total duration exceeds window."""
-        # Create tasks totaling more than 600 minutes
         tasks = [
             TaskWithConstraints(
                 id=str(i),
@@ -191,12 +187,10 @@ class TestSessionManagement:
     def test_reset_session(self):
         """Should reset session to initial state."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            # Create and advance session
             state = create_session("test")
             state.phase = WorkflowPhase.COMPLETE
             save_state(state)
 
-            # Reset
             reset_state = reset_session("test")
 
             assert reset_state.phase == WorkflowPhase.WEIGHTS
@@ -238,10 +232,8 @@ class TestWorkflowPhases:
     async def test_phase2_submit_tasks(self):
         """Should categorize tasks and advance to CONSTRAINTS phase."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            # Setup: create session in TASKS phase
             await phase1_set_weights("test", UtilityWeights())
 
-            # Mock categoriser
             mock_result = [
                 {"description": "Go to gym", "category": "Health"},
             ]
@@ -250,7 +242,7 @@ class TestWorkflowPhases:
                 new_callable=AsyncMock,
                 return_value=mock_result,
             ):
-                state = await phase2_submit_tasks("test", ["Go to gym"])
+                state, warnings = await phase2_submit_tasks("test", ["Go to gym"])
 
             assert state.phase == WorkflowPhase.CONSTRAINTS
             assert state.raw_tasks == ["Go to gym"]
@@ -260,30 +252,29 @@ class TestWorkflowPhases:
     async def test_phase2_wrong_phase_raises(self):
         """Should raise error if not in TASKS phase."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            create_session("test")  # Creates in WEIGHTS phase
+            create_session("test")
 
-            with pytest.raises(ValueError, match="Invalid phase"):
+            with pytest.raises(ValidationError, match="Invalid phase"):
                 await phase2_submit_tasks("test", ["Task"])
 
     @pytest.mark.asyncio
     async def test_phase2_missing_session_raises(self):
         """Should raise error for missing session."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            with pytest.raises(ValueError, match="not found"):
+            with pytest.raises(ValidationError, match="not found"):
                 await phase2_submit_tasks("nonexistent", ["Task"])
 
     @pytest.mark.asyncio
     async def test_phase3_set_constraints(self):
         """Should set constraints and advance to SCHEDULE phase."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            # Setup: advance to CONSTRAINTS phase
             await phase1_set_weights("test", UtilityWeights())
             with patch(
                 "src.orchestrator.categorise_tasks",
                 new_callable=AsyncMock,
-                return_value=[],
+                return_value=[{"description": "Task", "category": "Work"}],
             ):
-                await phase2_submit_tasks("test", [])
+                await phase2_submit_tasks("test", ["Task"])
 
             tasks = [
                 TaskWithConstraints(
@@ -294,7 +285,7 @@ class TestWorkflowPhases:
                 )
             ]
 
-            state = await phase3_set_constraints(
+            state, warnings = await phase3_set_constraints(
                 "test", tasks, "08:00", "18:00"
             )
 
@@ -306,14 +297,13 @@ class TestWorkflowPhases:
     async def test_phase4_generate_schedule(self):
         """Should generate schedule and complete workflow."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            # Setup: advance to SCHEDULE phase
             await phase1_set_weights("test", UtilityWeights())
             with patch(
                 "src.orchestrator.categorise_tasks",
                 new_callable=AsyncMock,
-                return_value=[],
+                return_value=[{"description": "Task", "category": "Work"}],
             ):
-                await phase2_submit_tasks("test", [])
+                await phase2_submit_tasks("test", ["Task"])
 
             tasks = [
                 TaskWithConstraints(
@@ -325,14 +315,8 @@ class TestWorkflowPhases:
             ]
             await phase3_set_constraints("test", tasks, "08:00", "18:00")
 
-            # Mock optimisers
-            mock_schedule = []
-            with patch(
-                "src.orchestrator.optimise_schedule_greedy",
-                new_callable=AsyncMock,
-                return_value=mock_schedule,
-            ):
-                state = await phase4_generate_schedule("test")
+            state, warnings = await phase4_generate_schedule("test")
 
             assert state.phase == WorkflowPhase.COMPLETE
             assert state.selected_algorithm == "greedy"
+            assert len(state.schedule) == 1

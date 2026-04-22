@@ -1,0 +1,18 @@
+{
+  "session_id": "session-1776840208424",
+  "phase": "tasks",
+  "error": null,
+  "weights": {
+    "personal": 0.4,
+    "health": 1.5,
+    "work": 0.5
+  },
+  "raw_tasks": null,
+  "categorised_tasks": null,
+  "tasks_with_constraints": null,
+  "window_start": null,
+  "window_end": null,
+  "selected_algorithm": null,
+  "schedule": null,
+  "schedule_warnings": null
+}

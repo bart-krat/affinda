@@ -139,10 +139,12 @@ class TestCategoriseTasks:
     @pytest.mark.asyncio
     async def test_raises_on_invalid_json_response(self, mock_completion):
         """Should raise error when OpenAI returns invalid JSON."""
+        from src.submodules.categoriser import CategorizationError
+
         with patch("src.submodules.categoriser.client") as mock_client:
             mock_client.chat.completions.create.return_value = mock_completion(
                 "This is not valid JSON"
             )
 
-            with pytest.raises(json.JSONDecodeError):
+            with pytest.raises(CategorizationError, match="Invalid response format"):
                 await categorise_tasks(["Test"])

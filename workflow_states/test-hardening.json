@@ -1,0 +1,98 @@
+{
+  "session_id": "test-hardening",
+  "phase": "complete",
+  "error": null,
+  "weights": {
+    "personal": 1.5,
+    "health": 2.0,
+    "work": 1.0
+  },
+  "raw_tasks": [
+    "Go to gym",
+    "Team meeting",
+    "Call mom",
+    "Lunch"
+  ],
+  "categorised_tasks": [
+    {
+      "description": "Go to gym",
+      "category": "Health"
+    },
+    {
+      "description": "Team meeting",
+      "category": "Work"
+    },
+    {
+      "description": "Call mom",
+      "category": "Personal"
+    },
+    {
+      "description": "Lunch",
+      "category": "Personal"
+    }
+  ],
+  "tasks_with_constraints": [
+    {
+      "id": "t1",
+      "description": "Go to gym",
+      "category": "Health",
+      "duration_minutes": 60,
+      "fixed_start_time": null
+    },
+    {
+      "id": "t2",
+      "description": "Team meeting",
+      "category": "Work",
+      "duration_minutes": 30,
+      "fixed_start_time": "09:00"
+    },
+    {
+      "id": "t3",
+      "description": "Call mom",
+      "category": "Personal",
+      "duration_minutes": 30,
+      "fixed_start_time": null
+    },
+    {
+      "id": "t4",
+      "description": "Lunch",
+      "category": "Personal",
+      "duration_minutes": 60,
+      "fixed_start_time": "12:00"
+    }
+  ],
+  "window_start": "08:00",
+  "window_end": "14:00",
+  "selected_algorithm": "permutation",
+  "schedule": [
+    {
+      "task_id": "t1",
+      "description": "Go to gym",
+      "category": "Health",
+      "start_time": "08:00",
+      "end_time": "09:00"
+    },
+    {
+      "task_id": "t2",
+      "description": "Team meeting",
+      "category": "Work",
+      "start_time": "09:00",
+      "end_time": "09:30"
+    },
+    {
+      "task_id": "t3",
+      "description": "Call mom",
+      "category": "Personal",
+      "start_time": "09:30",
+      "end_time": "10:00"
+    },
+    {
+      "task_id": "t4",
+      "description": "Lunch",
+      "category": "Personal",
+      "start_time": "12:00",
+      "end_time": "13:00"
+    }
+  ],
+  "schedule_warnings": []
+}

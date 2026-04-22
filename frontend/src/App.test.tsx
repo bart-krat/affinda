@@ -8,26 +8,33 @@ vi.mock("./api");
 describe("App", () => {
   const mockStartWorkflow = vi.mocked(api.startWorkflow);
 
+  const createMockResponse = (
+    phase: api.WorkflowPhase = "weights"
+  ): api.WorkflowResponse => ({
+    state: {
+      session_id: "test",
+      phase,
+      error: null,
+      weights: null,
+      raw_tasks: null,
+      categorised_tasks: null,
+      tasks_with_constraints: null,
+      window_start: null,
+      window_end: null,
+      selected_algorithm: null,
+      schedule: null,
+      schedule_warnings: null,
+    },
+    message: "Started",
+    warnings: [],
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
   });
 
   it("should render the title", async () => {
-    mockStartWorkflow.mockResolvedValue({
-      state: {
-        session_id: "test",
-        phase: "weights",
-        weights: null,
-        raw_tasks: null,
-        categorised_tasks: null,
-        tasks_with_constraints: null,
-        window_start: null,
-        window_end: null,
-        selected_algorithm: null,
-        schedule: null,
-      },
-      message: "Started",
-    });
+    mockStartWorkflow.mockResolvedValue(createMockResponse());
 
     render(<App />);
 
@@ -35,21 +42,7 @@ describe("App", () => {
   });
 
   it("should show WeightsForm in weights phase", async () => {
-    mockStartWorkflow.mockResolvedValue({
-      state: {
-        session_id: "test",
-        phase: "weights",
-        weights: null,
-        raw_tasks: null,
-        categorised_tasks: null,
-        tasks_with_constraints: null,
-        window_start: null,
-        window_end: null,
-        selected_algorithm: null,
-        schedule: null,
-      },
-      message: "Set weights",
-    });
+    mockStartWorkflow.mockResolvedValue(createMockResponse("weights"));
 
     render(<App />);
 
@@ -69,21 +62,7 @@ describe("App", () => {
   });
 
   it("should display progress indicator when state is loaded", async () => {
-    mockStartWorkflow.mockResolvedValue({
-      state: {
-        session_id: "test",
-        phase: "weights",
-        weights: null,
-        raw_tasks: null,
-        categorised_tasks: null,
-        tasks_with_constraints: null,
-        window_start: null,
-        window_end: null,
-        selected_algorithm: null,
-        schedule: null,
-      },
-      message: "Started",
-    });
+    mockStartWorkflow.mockResolvedValue(createMockResponse());
 
     render(<App />);
 

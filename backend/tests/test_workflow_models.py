@@ -133,10 +133,10 @@ class TestSubmitTasksRequest:
         assert request.session_id == "test"
         assert len(request.tasks) == 2
 
-    def test_empty_tasks_allowed(self):
-        """Should allow empty tasks list."""
-        request = SubmitTasksRequest(session_id="test", tasks=[])
-        assert request.tasks == []
+    def test_empty_tasks_raises(self):
+        """Should reject empty tasks list."""
+        with pytest.raises(ValidationError, match="cannot be empty"):
+            SubmitTasksRequest(session_id="test", tasks=[])
 
 
 class TestSetConstraintsRequest:

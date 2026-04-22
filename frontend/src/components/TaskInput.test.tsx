@@ -47,7 +47,6 @@ describe("TaskInput", () => {
   });
 
   it("should not call onSubmit when input is empty", async () => {
-    const user = userEvent.setup();
     render(<TaskInput onSubmit={mockOnSubmit} loading={false} />);
 
     // Force click even if disabled

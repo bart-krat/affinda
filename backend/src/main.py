@@ -1,5 +1,7 @@
+import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError as PydanticValidationError
 
 from .models.workflow import (
     SetWeightsRequest,
@@ -7,7 +9,6 @@ from .models.workflow import (
     SetConstraintsRequest,
     GenerateScheduleRequest,
     WorkflowResponse,
-    WorkflowState,
 )
 from .orchestrator import (
     create_session,
@@ -17,9 +18,23 @@ from .orchestrator import (
     phase2_submit_tasks,
     phase3_set_constraints,
     phase4_generate_schedule,
+    ValidationError,
+    APIError,
+    WorkflowError,
 )
 
-app = FastAPI()
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="Daily Schedule Planner API",
+    description="API for scheduling daily tasks with LLM categorization and optimization",
+    version="1.0.0",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,8 +53,16 @@ async def health():
 @app.post("/workflow/start")
 async def start_workflow(session_id: str) -> WorkflowResponse:
     """Start a new workflow session."""
-    state = create_session(session_id)
-    return WorkflowResponse(state=state, message="Workflow started. Set utility weights.")
+    try:
+        state = create_session(session_id)
+        return WorkflowResponse(
+            state=state,
+            message="Workflow started. Set utility weights.",
+            warnings=[],
+        )
+    except Exception as e:
+        logger.error(f"Failed to start workflow: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start workflow: {str(e)}")
 
 
 @app.get("/workflow/state/{session_id}")
@@ -48,14 +71,26 @@ async def get_workflow_state(session_id: str) -> WorkflowResponse:
     state = get_state(session_id)
     if state is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-    return WorkflowResponse(state=state, message=f"Current phase: {state.phase}")
+    return WorkflowResponse(
+        state=state,
+        message=f"Current phase: {state.phase}",
+        warnings=state.schedule_warnings or [],
+    )
 
 
 @app.post("/workflow/reset/{session_id}")
 async def reset_workflow(session_id: str) -> WorkflowResponse:
     """Reset workflow to beginning."""
-    state = reset_session(session_id)
-    return WorkflowResponse(state=state, message="Workflow reset. Set utility weights.")
+    try:
+        state = reset_session(session_id)
+        return WorkflowResponse(
+            state=state,
+            message="Workflow reset. Set utility weights.",
+            warnings=[],
+        )
+    except Exception as e:
+        logger.error(f"Failed to reset workflow: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to reset workflow: {str(e)}")
 
 
 @app.post("/workflow/phase1/weights")
@@ -65,51 +100,83 @@ async def set_weights(request: SetWeightsRequest) -> WorkflowResponse:
         state = await phase1_set_weights(request.session_id, request.weights)
         return WorkflowResponse(
             state=state,
-            message="Weights set. Now submit your task list."
+            message="Weights set. Now submit your task list.",
+            warnings=[],
         )
-    except ValueError as e:
+    except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except PydanticValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Phase 1 error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
 @app.post("/workflow/phase2/tasks")
 async def submit_tasks(request: SubmitTasksRequest) -> WorkflowResponse:
     """Phase 2: Submit tasks for LLM categorization."""
     try:
-        state = await phase2_submit_tasks(request.session_id, request.tasks)
+        state, warnings = await phase2_submit_tasks(request.session_id, request.tasks)
         return WorkflowResponse(
             state=state,
-            message=f"Tasks categorized. Set time constraints for {len(state.categorised_tasks)} tasks."
+            message=f"Tasks categorized. Set time constraints for {len(state.categorised_tasks)} tasks.",
+            warnings=warnings,
         )
-    except ValueError as e:
+    except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except APIError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"External service error: {str(e)}. Please try again."
+        )
+    except PydanticValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Phase 2 error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
 @app.post("/workflow/phase3/constraints")
 async def set_constraints(request: SetConstraintsRequest) -> WorkflowResponse:
     """Phase 3: Set time constraints for tasks."""
     try:
-        state = await phase3_set_constraints(
+        state, warnings = await phase3_set_constraints(
             request.session_id,
             request.tasks,
             request.window_start,
             request.window_end,
         )
+        message = "Constraints set. Ready to generate schedule."
+        if warnings:
+            message += f" ({len(warnings)} warning(s))"
         return WorkflowResponse(
             state=state,
-            message="Constraints set. Ready to generate schedule."
+            message=message,
+            warnings=warnings,
         )
-    except ValueError as e:
+    except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except PydanticValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Phase 3 error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
 @app.post("/workflow/phase4/schedule")
 async def generate_schedule(request: GenerateScheduleRequest) -> WorkflowResponse:
     """Phase 4: Generate optimized schedule."""
     try:
-        state = await phase4_generate_schedule(request.session_id)
+        state, warnings = await phase4_generate_schedule(request.session_id)
         return WorkflowResponse(
             state=state,
-            message=f"Schedule generated using {state.selected_algorithm} algorithm."
+            message=f"Schedule generated using {state.selected_algorithm} algorithm.",
+            warnings=warnings,
         )
-    except ValueError as e:
+    except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except WorkflowError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Phase 4 error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")

@@ -1,0 +1,14 @@
+{
+  "session_id": "session-1776840047161",
+  "phase": "weights",
+  "error": null,
+  "weights": null,
+  "raw_tasks": null,
+  "categorised_tasks": null,
+  "tasks_with_constraints": null,
+  "window_start": null,
+  "window_end": null,
+  "selected_algorithm": null,
+  "schedule": null,
+  "schedule_warnings": null
+}

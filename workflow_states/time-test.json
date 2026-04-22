@@ -1,0 +1,25 @@
+{
+  "session_id": "time-test",
+  "phase": "constraints",
+  "error": null,
+  "weights": {
+    "personal": 1.0,
+    "health": 1.0,
+    "work": 1.0
+  },
+  "raw_tasks": [
+    "Test"
+  ],
+  "categorised_tasks": [
+    {
+      "description": "Test",
+      "category": "Work"
+    }
+  ],
+  "tasks_with_constraints": null,
+  "window_start": null,
+  "window_end": null,
+  "selected_algorithm": null,
+  "schedule": null,
+  "schedule_warnings": null
+}

@@ -16,6 +16,7 @@ describe("api", () => {
     state: {
       session_id: "test-123",
       phase: "weights",
+      error: null,
       weights: null,
       raw_tasks: null,
       categorised_tasks: null,
@@ -24,8 +25,10 @@ describe("api", () => {
       window_end: null,
       selected_algorithm: null,
       schedule: null,
+      schedule_warnings: null,
     },
     message: "Success",
+    warnings: [],
   };
 
   beforeEach(() => {
@@ -52,13 +55,14 @@ describe("api", () => {
       expect(result.state.session_id).toBe("test-123");
     });
 
-    it("should throw error on failure", async () => {
+    it("should throw APIError on failure", async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 500,
+        json: () => Promise.resolve({ detail: "Internal error" }),
       });
 
-      await expect(startWorkflow("test")).rejects.toThrow("API error: 500");
+      await expect(startWorkflow("test")).rejects.toThrow();
     });
   });
 

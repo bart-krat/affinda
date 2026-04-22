@@ -33,6 +33,7 @@ export interface ScheduledBlock {
 export interface WorkflowState {
   session_id: string;
   phase: WorkflowPhase;
+  error: string | null;
   weights: UtilityWeights | null;
   raw_tasks: string[] | null;
   categorised_tasks: CategorisedTask[] | null;
@@ -41,34 +42,70 @@ export interface WorkflowState {
   window_end: string | null;
   selected_algorithm: string | null;
   schedule: ScheduledBlock[] | null;
+  schedule_warnings: string[] | null;
 }
 
 export interface WorkflowResponse {
   state: WorkflowState;
   message: string;
+  warnings: string[];
+}
+
+export class APIError extends Error {
+  status: number;
+  detail: string;
+
+  constructor(status: number, detail: string) {
+    super(detail);
+    this.name = "APIError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+async function handleResponse(response: Response): Promise<WorkflowResponse> {
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const errorData = await response.json();
+      detail = errorData.detail || detail;
+    } catch {
+      // Ignore JSON parse errors
+    }
+
+    if (response.status === 503) {
+      throw new APIError(response.status, "Service temporarily unavailable. Please try again.");
+    } else if (response.status === 422) {
+      throw new APIError(response.status, `Validation error: ${detail}`);
+    } else if (response.status === 400) {
+      throw new APIError(response.status, detail);
+    } else if (response.status === 404) {
+      throw new APIError(response.status, "Session not found. Please start over.");
+    } else {
+      throw new APIError(response.status, `Server error: ${detail}`);
+    }
+  }
+  return response.json();
 }
 
 // API Functions
 export async function startWorkflow(sessionId: string): Promise<WorkflowResponse> {
-  const response = await fetch(`${API_BASE}/workflow/start?session_id=${sessionId}`, {
+  const response = await fetch(`${API_BASE}/workflow/start?session_id=${encodeURIComponent(sessionId)}`, {
     method: "POST",
   });
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
-  return response.json();
+  return handleResponse(response);
 }
 
 export async function getWorkflowState(sessionId: string): Promise<WorkflowResponse> {
-  const response = await fetch(`${API_BASE}/workflow/state/${sessionId}`);
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
-  return response.json();
+  const response = await fetch(`${API_BASE}/workflow/state/${encodeURIComponent(sessionId)}`);
+  return handleResponse(response);
 }
 
 export async function resetWorkflow(sessionId: string): Promise<WorkflowResponse> {
-  const response = await fetch(`${API_BASE}/workflow/reset/${sessionId}`, {
+  const response = await fetch(`${API_BASE}/workflow/reset/${encodeURIComponent(sessionId)}`, {
     method: "POST",
   });
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
-  return response.json();
+  return handleResponse(response);
 }
 
 export async function setWeights(
@@ -80,8 +117,7 @@ export async function setWeights(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId, weights }),
   });
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
-  return response.json();
+  return handleResponse(response);
 }
 
 export async function submitTasks(
@@ -93,8 +129,7 @@ export async function submitTasks(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId, tasks }),
   });
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
-  return response.json();
+  return handleResponse(response);
 }
 
 export async function setConstraints(
@@ -113,8 +148,7 @@ export async function setConstraints(
       window_end: windowEnd,
     }),
   });
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
-  return response.json();
+  return handleResponse(response);
 }
 
 export async function generateSchedule(sessionId: string): Promise<WorkflowResponse> {
@@ -123,6 +157,5 @@ export async function generateSchedule(sessionId: string): Promise<WorkflowRespo
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId }),
   });
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
-  return response.json();
+  return handleResponse(response);
 }

@@ -14,10 +14,10 @@ class TestCategoriseRequest:
         request = CategoriseRequest(tasks=["Go to gym", "Call mom"])
         assert request.tasks == ["Go to gym", "Call mom"]
 
-    def test_valid_request_with_empty_list(self):
-        """Should create request with empty tasks list."""
-        request = CategoriseRequest(tasks=[])
-        assert request.tasks == []
+    def test_empty_list_raises(self):
+        """Should raise error for empty tasks list."""
+        with pytest.raises(ValidationError, match="cannot be empty"):
+            CategoriseRequest(tasks=[])
 
     def test_valid_request_with_single_task(self):
         """Should create request with single task."""
@@ -38,6 +38,28 @@ class TestCategoriseRequest:
         """Should raise error when tasks contains non-strings."""
         with pytest.raises(ValidationError):
             CategoriseRequest(tasks=[123, 456])
+
+    def test_strips_whitespace(self):
+        """Should strip whitespace from tasks."""
+        request = CategoriseRequest(tasks=["  Go to gym  ", "  Call mom  "])
+        assert request.tasks == ["Go to gym", "Call mom"]
+
+    def test_filters_empty_strings(self):
+        """Should filter out empty strings after stripping."""
+        request = CategoriseRequest(tasks=["Go to gym", "   ", "Call mom"])
+        assert request.tasks == ["Go to gym", "Call mom"]
+
+    def test_max_tasks_limit(self):
+        """Should reject more than 50 tasks."""
+        tasks = [f"Task {i}" for i in range(51)]
+        with pytest.raises(ValidationError, match="Maximum 50 tasks"):
+            CategoriseRequest(tasks=tasks)
+
+    def test_task_length_limit(self):
+        """Should reject tasks over 500 characters."""
+        long_task = "x" * 501
+        with pytest.raises(ValidationError, match="too long"):
+            CategoriseRequest(tasks=[long_task])
 
 
 class TestCategorisedTask:
@@ -65,10 +87,10 @@ class TestCategorisedTask:
         with pytest.raises(ValidationError):
             CategorisedTask(description="Go to gym")
 
-    def test_empty_description_allowed(self):
-        """Should allow empty description string."""
-        task = CategorisedTask(description="", category="Work")
-        assert task.description == ""
+    def test_invalid_category_rejected(self):
+        """Should reject invalid category values."""
+        with pytest.raises(ValidationError):
+            CategorisedTask(description="Task", category="Invalid")
 
 
 class TestCategoriseResponse:

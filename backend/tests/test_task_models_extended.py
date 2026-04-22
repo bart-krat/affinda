@@ -46,26 +46,68 @@ class TestTaskWithConstraints:
         with pytest.raises(ValidationError):
             TaskWithConstraints(id="1", description="Test")
 
-    def test_zero_duration_allowed(self):
-        """Should allow zero duration."""
-        task = TaskWithConstraints(
-            id="1",
-            description="Test",
-            category="Work",
-            duration_minutes=0,
-        )
-        assert task.duration_minutes == 0
+    def test_minimum_duration_is_one(self):
+        """Should require minimum 1 minute duration."""
+        with pytest.raises(ValidationError, match="at least 1 minute"):
+            TaskWithConstraints(
+                id="1",
+                description="Test",
+                category="Work",
+                duration_minutes=0,
+            )
 
     def test_negative_duration_raises(self):
-        """Should allow negative duration (no constraint in model)."""
-        # Note: The model doesn't enforce positive durations
+        """Should raise error for negative duration."""
+        with pytest.raises(ValidationError, match="at least 1 minute"):
+            TaskWithConstraints(
+                id="1",
+                description="Test",
+                category="Work",
+                duration_minutes=-10,
+            )
+
+    def test_max_duration_is_480(self):
+        """Should reject duration over 480 minutes."""
+        with pytest.raises(ValidationError, match="cannot exceed 480"):
+            TaskWithConstraints(
+                id="1",
+                description="Test",
+                category="Work",
+                duration_minutes=481,
+            )
+
+    def test_valid_duration_at_boundaries(self):
+        """Should accept durations at boundaries."""
+        task_min = TaskWithConstraints(
+            id="1", description="Test", category="Work", duration_minutes=1
+        )
+        task_max = TaskWithConstraints(
+            id="2", description="Test", category="Work", duration_minutes=480
+        )
+        assert task_min.duration_minutes == 1
+        assert task_max.duration_minutes == 480
+
+    def test_time_format_validation(self):
+        """Should validate HH:MM time format."""
+        with pytest.raises(ValidationError, match="Invalid time format"):
+            TaskWithConstraints(
+                id="1",
+                description="Test",
+                category="Work",
+                duration_minutes=30,
+                fixed_start_time="8am",
+            )
+
+    def test_time_normalization(self):
+        """Should normalize time to HH:MM format."""
         task = TaskWithConstraints(
             id="1",
             description="Test",
             category="Work",
-            duration_minutes=-10,
+            duration_minutes=30,
+            fixed_start_time="9:00",
         )
-        assert task.duration_minutes == -10
+        assert task.fixed_start_time == "09:00"
 
 
 class TestDayConstraints:
@@ -87,10 +129,25 @@ class TestDayConstraints:
         with pytest.raises(ValidationError):
             DayConstraints(window_start="08:00")
 
-    def test_arbitrary_time_format(self):
-        """Should accept any string format (no validation)."""
-        constraints = DayConstraints(window_start="8am", window_end="6pm")
-        assert constraints.window_start == "8am"
+    def test_invalid_time_format_raises(self):
+        """Should reject invalid time format."""
+        with pytest.raises(ValidationError, match="Invalid time format"):
+            DayConstraints(window_start="8am", window_end="6pm")
+
+    def test_end_must_be_after_start(self):
+        """Should reject window where end is before or equal to start."""
+        with pytest.raises(ValidationError, match="after window start"):
+            DayConstraints(window_start="18:00", window_end="08:00")
+
+    def test_minimum_window_duration(self):
+        """Should require at least 30 minute window."""
+        with pytest.raises(ValidationError, match="at least 30 minutes"):
+            DayConstraints(window_start="08:00", window_end="08:15")
+
+    def test_time_normalization(self):
+        """Should normalize times."""
+        constraints = DayConstraints(window_start="8:00", window_end="18:00")
+        assert constraints.window_start == "08:00"
 
 
 class TestUtilityWeights:
@@ -115,10 +172,15 @@ class TestUtilityWeights:
         weights = UtilityWeights(personal=0, health=0, work=0)
         assert weights.personal == 0
 
-    def test_negative_weights_allowed(self):
-        """Should allow negative weights (no constraint)."""
-        weights = UtilityWeights(personal=-1.0)
-        assert weights.personal == -1.0
+    def test_negative_weights_rejected(self):
+        """Should reject negative weights."""
+        with pytest.raises(ValidationError, match="cannot be negative"):
+            UtilityWeights(personal=-1.0)
+
+    def test_max_weight_is_10(self):
+        """Should reject weights over 10."""
+        with pytest.raises(ValidationError, match="cannot exceed 10"):
+            UtilityWeights(personal=11.0)
 
     def test_partial_weights(self):
         """Should allow partial weight specification."""
@@ -156,21 +218,53 @@ class TestScheduleRequest:
     def test_default_algorithm_is_greedy(self):
         """Should default to greedy algorithm."""
         request = ScheduleRequest(
-            tasks=[],
+            tasks=[
+                TaskWithConstraints(
+                    id="1",
+                    description="Task",
+                    category="Work",
+                    duration_minutes=30,
+                )
+            ],
             constraints=DayConstraints(window_start="08:00", window_end="18:00"),
             weights=UtilityWeights(),
         )
         assert request.algorithm == "greedy"
 
-    def test_custom_algorithm(self):
-        """Should accept custom algorithm."""
-        request = ScheduleRequest(
-            tasks=[],
-            constraints=DayConstraints(window_start="08:00", window_end="18:00"),
-            weights=UtilityWeights(),
-            algorithm="knapsack",
-        )
-        assert request.algorithm == "knapsack"
+    def test_valid_algorithm_values(self):
+        """Should accept valid algorithm values."""
+        for algo in ["greedy", "knapsack", "permutation"]:
+            request = ScheduleRequest(
+                tasks=[
+                    TaskWithConstraints(
+                        id="1",
+                        description="Task",
+                        category="Work",
+                        duration_minutes=30,
+                    )
+                ],
+                constraints=DayConstraints(window_start="08:00", window_end="18:00"),
+                weights=UtilityWeights(),
+                algorithm=algo,
+            )
+            assert request.algorithm == algo
+
+    def test_invalid_algorithm_rejected(self):
+        """Should reject invalid algorithm values."""
+        with pytest.raises(ValidationError):
+            ScheduleRequest(
+                tasks=[
+                    TaskWithConstraints(
+                        id="1",
+                        description="Task",
+                        category="Work",
+                        duration_minutes=30,
+                    )
+                ],
+                constraints=DayConstraints(window_start="08:00", window_end="18:00"),
+                weights=UtilityWeights(),
+                algorithm="invalid",
+            )
 
 
 class TestScheduledBlock:
@@ -213,8 +307,14 @@ class TestScheduleResponse:
         ]
         response = ScheduleResponse(schedule=blocks)
         assert len(response.schedule) == 1
+        assert response.warnings == []
 
     def test_empty_schedule(self):
         """Should allow empty schedule."""
         response = ScheduleResponse(schedule=[])
         assert response.schedule == []
+
+    def test_warnings_field(self):
+        """Should accept warnings."""
+        response = ScheduleResponse(schedule=[], warnings=["Some tasks were skipped"])
+        assert len(response.warnings) == 1

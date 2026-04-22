@@ -1,8 +1,7 @@
 """Integration tests for API endpoints."""
 
-import json
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, AsyncMock
 import tempfile
 import shutil
 from pathlib import Path
@@ -62,10 +61,8 @@ class TestWorkflowStateEndpoint:
     def test_get_existing_state(self, client):
         """Should return state for existing session."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            # Create session first
             client.post("/workflow/start?session_id=test-123")
 
-            # Get state
             response = client.get("/workflow/state/test-123")
 
             assert response.status_code == 200
@@ -93,10 +90,8 @@ class TestWorkflowResetEndpoint:
     def test_reset_workflow(self, client):
         """Should reset workflow to initial state."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            # Create session
             client.post("/workflow/start?session_id=test-123")
 
-            # Reset
             response = client.post("/workflow/reset/test-123")
 
             assert response.status_code == 200
@@ -169,7 +164,6 @@ class TestPhase2TasksEndpoint:
     def test_submit_tasks(self, client):
         """Should categorize tasks and advance to constraints phase."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            # Setup: advance to TASKS phase
             client.post(
                 "/workflow/phase1/weights",
                 json={
@@ -178,7 +172,6 @@ class TestPhase2TasksEndpoint:
                 },
             )
 
-            # Mock categoriser
             with patch(
                 "src.orchestrator.categorise_tasks",
                 new_callable=AsyncMock,
@@ -195,7 +188,6 @@ class TestPhase2TasksEndpoint:
     def test_submit_tasks_wrong_phase(self, client):
         """Should return 400 if not in TASKS phase."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            # Create session but don't advance
             client.post("/workflow/start?session_id=test")
 
             response = client.post(
@@ -220,7 +212,6 @@ class TestPhase3ConstraintsEndpoint:
     def test_set_constraints(self, client):
         """Should set constraints and advance to schedule phase."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            # Setup: advance to CONSTRAINTS phase
             client.post(
                 "/workflow/phase1/weights",
                 json={
@@ -231,11 +222,11 @@ class TestPhase3ConstraintsEndpoint:
             with patch(
                 "src.orchestrator.categorise_tasks",
                 new_callable=AsyncMock,
-                return_value=[],
+                return_value=[{"description": "Task", "category": "Work"}],
             ):
                 client.post(
                     "/workflow/phase2/tasks",
-                    json={"session_id": "test", "tasks": []},
+                    json={"session_id": "test", "tasks": ["Task"]},
                 )
 
             response = client.post(
@@ -273,7 +264,6 @@ class TestPhase4ScheduleEndpoint:
     def test_generate_schedule(self, client):
         """Should generate schedule and complete workflow."""
         with patch("src.orchestrator.STATE_DIR", self.temp_dir):
-            # Setup: advance to SCHEDULE phase
             client.post(
                 "/workflow/phase1/weights",
                 json={
@@ -284,11 +274,11 @@ class TestPhase4ScheduleEndpoint:
             with patch(
                 "src.orchestrator.categorise_tasks",
                 new_callable=AsyncMock,
-                return_value=[],
+                return_value=[{"description": "Task", "category": "Work"}],
             ):
                 client.post(
                     "/workflow/phase2/tasks",
-                    json={"session_id": "test", "tasks": []},
+                    json={"session_id": "test", "tasks": ["Task"]},
                 )
             client.post(
                 "/workflow/phase3/constraints",
